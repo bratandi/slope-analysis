@@ -652,11 +652,9 @@ try:
     with tab1:
         st.markdown("### Критичні поверхні ковзання")
         col1, col2, col3 = st.columns(3)
-        def clean_critical_fig(slope_obj, title, fs_val):
+        def clean_critical_fig(slope_obj, title):
             """Будує plot_critical() без вбудованої таблиці матеріалів"""
-            fig = slope_obj.plot_critical()
-            # Видаляємо trace-таблицю pyslope (go.Table) — параметри вже є в сайдбарі
-            fig.data = tuple(t for t in fig.data if t.type != "table")
+            fig = slope_obj.plot_critical(material_table=False)
             fig.update_layout(
                 height=400,
                 margin=dict(t=40, b=10, l=10, r=10),
@@ -666,15 +664,15 @@ try:
 
         with col1:
             st.markdown(f"**Природний** — Fs = {fs1:.3f} {fs_label(fs1)}")
-            fig1 = clean_critical_fig(s1, f"Природний · Fs = {fs1:.3f}", fs1)
+            fig1 = clean_critical_fig(s1, f"Природний · Fs = {fs1:.3f}")
             st.plotly_chart(fig1, use_container_width=True)
         with col2:
             st.markdown(f"**Замочений** — Fs = {fs2:.3f} {fs_label(fs2)}")
-            fig2 = clean_critical_fig(s2, f"Замочений · Fs = {fs2:.3f}", fs2)
+            fig2 = clean_critical_fig(s2, f"Замочений · Fs = {fs2:.3f}")
             st.plotly_chart(fig2, use_container_width=True)
         with col3:
             st.markdown(f"**З армуванням ({arm_type[:12]})** — Fs = {fs3:.3f} {fs_label(fs3)}")
-            fig3 = clean_critical_fig(s3, f"З армуванням · Fs = {fs3:.3f}", fs3)
+            fig3 = clean_critical_fig(s3, f"З армуванням · Fs = {fs3:.3f}")
             st.plotly_chart(fig3, use_container_width=True)
 
         st.markdown("---")
