@@ -3,6 +3,150 @@ from pyslope import Slope, Material, Udl, LineLoad
 import plotly.graph_objects as go
 import pandas as pd
 import math
+import numpy as np
+
+
+# ===== ФЕЛЛЄНІУС: допоміжні функції =====
+
+def _fel_circle(xc, yc, R, H, L, layer1_bot_elev,
+                c1, phi1_r, g1, c2, phi2_r, g2,
+                wt_depth, n_slices=35):
+    """Fs за Феллєніусом для одного кола (xc, yc, R)"""
+    gamma_w = 9.81
+    if R < 0.3 * H:
+        return None
+
+    # x-межі кола
+    disc = R**2 - yc**2
+    if disc < 0:
+        return None
+    xl = max(xc - R, -0.6 * L)
+    xr = min(xc + R,  1.6 * L)
+    if xr - xl < 0.05 * H:
+        return None
+
+    dx = (xr - xl) / n_slices
+    resist = drive = 0.0
+    valid = 0
+
+    for i in range(n_slices):
+        xm = xl + (i + 0.5) * dx
+        d2 = R**2 - (xm - xc)**2
+        if d2 < 0:
+            continue
+        yb = yc - math.sqrt(d2)          # дно зрізу (на колі)
+
+        # поверхня схилу
+        if xm <= 0:
+            yt = H
+        elif xm >= L:
+            yt = 0.0
+        else:
+            yt = H - (H / L) * xm
+
+        if yt - yb < 1e-6 or yb < -50:
+            continue
+
+        h = yt - yb
+
+        # вага (два шари)
+        if yt > layer1_bot_elev and yb < layer1_bot_elev:
+            h1 = yt - layer1_bot_elev
+            h2 = layer1_bot_elev - yb
+            W = (g1 * h1 + g2 * h2) * dx
+        elif yb >= layer1_bot_elev:
+            W = g1 * h * dx
+        else:
+            W = g2 * h * dx
+
+        # кут підошви зрізу
+        sin_a = max(-0.999, min(0.999, (xm - xc) / R))
+        alpha = math.asin(sin_a)
+        cos_a = math.cos(alpha)
+        if cos_a < 0.02:
+            continue
+
+        l = dx / cos_a   # довжина підошви
+
+        # параметри матеріалу
+        if yb >= layer1_bot_elev:
+            c, phi = c1, phi1_r
+        else:
+            c, phi = c2, phi2_r
+
+        # поровий тиск
+        u = 0.0
+        if wt_depth is not None:
+            wt_elev = H - wt_depth
+            if yb < wt_elev:
+                u = gamma_w * (wt_elev - yb)
+
+        N_eff = W * cos_a - u * l
+        resist += c * l + max(N_eff, 0.0) * math.tan(phi)
+        drive  += W * math.sin(alpha)
+        valid  += 1
+
+    if drive <= 0 or valid < 6:
+        return None
+    return resist / drive
+
+
+@st.cache_data(show_spinner=False)
+def fellenius_min_fs(H, beta_deg, depth1, depth2,
+                     c1, phi1, g1, c2, phi2, g2, wt_depth):
+    """Пошук мінімального Fs методом Феллєніуса (кешується)"""
+    beta   = beta_deg * math.pi / 180
+    L      = H / math.tan(beta)
+    phi1_r = phi1 * math.pi / 180
+    phi2_r = phi2 * math.pi / 180
+    layer1_bot = H - depth1
+
+    min_fs = float('inf')
+
+    # Сітка пошуку центрів і радіусів
+    xc_vals = np.linspace(-0.4 * L, 1.2 * L, 18)
+    yc_vals = np.linspace(H * 0.7, H * 2.8, 18)
+    R_vals  = np.linspace(H * 0.8, H * 2.8,  9)
+
+    for xc in xc_vals:
+        for yc in yc_vals:
+            for R in R_vals:
+                fs = _fel_circle(xc, yc, R, H, L, layer1_bot,
+                                 c1, phi1_r, g1, c2, phi2_r, g2,
+                                 wt_depth)
+                if fs and 0.3 < fs < 9:
+                    if fs < min_fs:
+                        min_fs = fs
+
+    return min_fs if min_fs < float('inf') else None
+
+
+def infinite_slope_fs(beta_deg, c, phi_deg, gamma, z, wt_depth=None):
+    """
+    Аналітична формула нескінченного схилу:
+    Fs = c/(γz·sinβ·cosβ) + tanφ/tanβ  [- поправка на ГРВ]
+    Застосовна для поверхневих планарних зсувів.
+    """
+    beta  = beta_deg * math.pi / 180
+    phi   = phi_deg  * math.pi / 180
+    gamma_w = 9.81
+
+    sin_b = math.sin(beta)
+    cos_b = math.cos(beta)
+    tan_b = math.tan(beta)
+    tan_p = math.tan(phi)
+
+    fs_c   = c / (gamma * z * sin_b * cos_b) if (gamma * z * sin_b * cos_b) > 0 else 0
+    fs_phi = tan_p / tan_b
+
+    # поправка на ГРВ (m = hw/z)
+    fs_u = 0.0
+    if wt_depth is not None and z > 0:
+        hw = max(0, z - wt_depth)  # висота насиченої зони над підошвою
+        m  = min(hw / z, 1.0)
+        fs_u = -m * (gamma_w / gamma) * (cos_b**2) * tan_p / (sin_b * cos_b)
+
+    return fs_c + fs_phi + fs_u
 
 st.set_page_config(
     page_title="Стійкість лесового схилу",
@@ -496,12 +640,13 @@ try:
     st.markdown("---")
 
     # ===== ВКЛАДКИ =====
-    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
         "🔄 Поверхні ковзання",
         "📊 Порівняння Fs",
         "📈 Параметричний аналіз",
         "🗺️ Всі поверхні",
-        "📋 Таблиця та експорт"
+        "📋 Таблиця та експорт",
+        "🔬 Верифікація методу"
     ])
 
     with tab1:
@@ -755,6 +900,150 @@ try:
             - Метод: Спрощений Бішоп
             - Ітерацій: {iterations}
             - Армування: {arm_type} ({arm_layer})
+            """)
+
+    # ===== ТАБ 6: ВЕРИФІКАЦІЯ =====
+    with tab6:
+        st.markdown("### 🔬 Верифікація методу Бішопа")
+
+        st.info(
+            "**Як перевірити коректність розрахунку Бішопа?**\n\n"
+            "1. **Метод Феллєніуса** (Ordinary Method of Slices) — найпростіший метод кіл ковзання. "
+            "Завжди дає **нижчий** Fs ніж Бішоп на 5–15% для кругових поверхонь. "
+            "Якщо це виконується — Бішоп рахує правильно.\n\n"
+            "2. **Нескінченний схил** (аналітична формула) — застосовна для поверхневих планарних зсувів. "
+            "Показує порядок Fs для верхнього шару."
+        )
+
+        run_verif = st.button("▶️ Запустити верифікацію", type="primary",
+                              help="Пошук критичного кола Феллєніуса займає ~5–10 сек")
+
+        if run_verif:
+            results_v = {}
+
+            with st.spinner("🔍 Шукаємо критичне коло (Феллєніус)…"):
+                # Сценарій 1 — природний
+                fv1 = fellenius_min_fs(
+                    H, beta, depth1, depth2,
+                    c1_nat, phi1_nat, g1_nat,
+                    c2_layer, phi2_layer, g2_layer,
+                    wt_depth=None
+                )
+                # Сценарій 2 — замочений
+                fv2 = fellenius_min_fs(
+                    H, beta, depth1, depth2,
+                    c1_wet, phi1_wet, g1_wet,
+                    c2_layer, phi2_layer, g2_layer,
+                    wt_depth=wt
+                )
+                # Сценарій 3 — з армуванням
+                fv3 = fellenius_min_fs(
+                    H, beta, depth1, depth2,
+                    c_arm, phi_arm, g1_wet,
+                    c2_armed, phi2_armed, g2_layer,
+                    wt_depth=wt
+                )
+
+            # Нескінченний схил — для шару 1 (природний і замочений)
+            is_nat = infinite_slope_fs(beta, c1_nat, phi1_nat, g1_nat,
+                                       z=depth1, wt_depth=None)
+            is_wet = infinite_slope_fs(beta, c1_wet, phi1_wet, g1_wet,
+                                       z=depth1, wt_depth=wt)
+
+            # ---- Порівняльна таблиця ----
+            st.markdown("#### 📋 Порівняння методів")
+
+            rows = []
+            for label, fs_b, fs_f in [
+                ("🌤️ Природний",        fs1,  fv1),
+                ("💧 Замочений",         fs2,  fv2),
+                (f"🌿 З армуванням",     fs3,  fv3),
+            ]:
+                ratio = f"{fs_b/fs_f:.3f}" if fs_f else "—"
+                verdict = ""
+                if fs_f:
+                    r = fs_b / fs_f
+                    if 1.03 <= r <= 1.18:
+                        verdict = "✅ В нормі (1.03–1.18)"
+                    elif r < 1.03:
+                        verdict = "⚠️ Бішоп нижче Феллєніуса — перевір геометрію"
+                    else:
+                        verdict = "⚠️ Розбіжність > 18%"
+                rows.append({
+                    "Сценарій":         label,
+                    "Fs Бішоп":         round(fs_b, 3),
+                    "Fs Феллєніус":     round(fs_f, 3) if fs_f else "—",
+                    "Відношення B/F":   ratio,
+                    "Висновок":         verdict,
+                })
+
+            df_v = pd.DataFrame(rows)
+            st.dataframe(df_v, use_container_width=True, hide_index=True)
+
+            # ---- Нескінченний схил ----
+            st.markdown("#### 📐 Нескінченний схил (аналітична перевірка шару 1)")
+            col_i1, col_i2 = st.columns(2)
+            with col_i1:
+                st.metric("Fs нескінч. схил — природний",
+                          f"{is_nat:.3f}" if is_nat else "—",
+                          f"Бішоп: {fs1:.3f}  (Δ = {fs1-is_nat:+.3f})" if is_nat else "")
+            with col_i2:
+                st.metric("Fs нескінч. схил — замочений",
+                          f"{is_wet:.3f}" if is_wet else "—",
+                          f"Бішоп: {fs2:.3f}  (Δ = {fs2-is_wet:+.3f})" if is_wet else "")
+
+            # ---- Графік порівняння ----
+            st.markdown("#### 📊 Візуалізація")
+            labels = ["🌤️ Природний", "💧 Замочений", "🌿 З армуванням"]
+            fs_bishop = [fs1, fs2, fs3]
+            fs_fell   = [fv1 or 0, fv2 or 0, fv3 or 0]
+
+            fig_v = go.Figure()
+            fig_v.add_trace(go.Bar(
+                name="Бішоп (pyslope)",
+                x=labels, y=fs_bishop,
+                marker_color="#42a5f5",
+                text=[f"{v:.3f}" for v in fs_bishop],
+                textposition="outside"
+            ))
+            fig_v.add_trace(go.Bar(
+                name="Феллєніус (власна реалізація)",
+                x=labels, y=fs_fell,
+                marker_color="#ef9a9a",
+                text=[f"{v:.3f}" if v else "—" for v in fs_fell],
+                textposition="outside"
+            ))
+            fig_v.add_hline(y=1.5, line_dash="dash", line_color="#4caf50",
+                            annotation_text="Fs = 1.5 (ДБН)")
+            fig_v.update_layout(
+                barmode="group",
+                title="Бішоп vs Феллєніус — однакові вхідні дані",
+                yaxis_title="Fs",
+                height=420,
+                yaxis=dict(range=[0, max(fs_bishop + fs_fell) * 1.3]),
+                legend=dict(x=0.01, y=0.99),
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(20,25,40,0.5)"
+            )
+            st.plotly_chart(fig_v, use_container_width=True)
+
+            # ---- Теоретичне пояснення ----
+            st.markdown("---")
+            st.markdown("#### 📚 Чому Бішоп > Феллєніус?")
+            st.markdown("""
+| Характеристика | Феллєніус (ОМЗ) | Бішоп спрощений |
+|---|---|---|
+| Міжслайсові сили | Ігноруються | Горизонтальні враховані |
+| Точність | ~5–15% занижений | Рекомендований для практики |
+| Складність | Пряма формула | Ітераційний |
+| Застосування | Верифікація, навчання | Проектування |
+| Нормативи | ДБН допускає | Основний метод |
+
+**Критерій верифікації:** відношення Бішоп/Феллєніус має бути **1.03–1.18**.
+Якщо так — розрахунок методом Бішопа є коректним.
+
+**Нескінченний схил** дає приблизну оцінку для поверхневих зсувів і не враховує
+форму поверхні ковзання — тому зазвичай відрізняється більше.
             """)
 
 except Exception as e:
