@@ -148,6 +148,54 @@ def infinite_slope_fs(beta_deg, c, phi_deg, gamma, z, wt_depth=None):
 
     return fs_c + fs_phi + fs_u
 
+# ===== ГЕОСИНТЕТИЧНІ МАТЕРІАЛИ — технічні характеристики =====
+GEO_DATA = {
+    "GT1": {
+        "name": "Геотекстиль нетканий голкопробивний",
+        "material": "PP (поліпропілен)", "type": "geotextile",
+        "T_break": (16,    16   ), "T_2pct": (5,    5   ), "T_5pct": (8,    8   ),
+        "elong":   (45,    45   ), "E_2pct": (250,  250 ), "E_5pct": (160,  160 ),
+    },
+    "GT2": {
+        "name": "Геотекстиль нетканий термоскріплений",
+        "material": "PP (поліпропілен)", "type": "geotextile",
+        "T_break": (13.1,  13.1 ), "T_2pct": (4,    4   ), "T_5pct": (6.5,  6.5 ),
+        "elong":   (55,    55   ), "E_2pct": (200,  200 ), "E_5pct": (130,  130 ),
+    },
+    "GT3": {
+        "name": "Геотекстиль тканий",
+        "material": "PET (поліестер)", "type": "geotextile",
+        "T_break": (440,   55   ), "T_2pct": (85,   12  ), "T_5pct": (200,  33  ),
+        "elong":   (12,    11   ), "E_2pct": (4250, 600 ), "E_5pct": (4000, 660 ),
+    },
+    "GG1": {
+        "name": "Геосітка двовісна жорстка",
+        "material": "PP (поліпропілен)", "type": "geogrid",
+        "T_break": (40,    40   ), "T_2pct": (15,   15  ), "T_5pct": (30,   30  ),
+        "elong":   (11,    11   ), "E_2pct": (750,  750 ), "E_5pct": (600,  600 ),
+    },
+    "GG2": {
+        "name": "Геосітка ткана гнучка",
+        "material": "PET + ПВХ-покриття", "type": "geogrid",
+        "T_break": (60,    60   ), "T_2pct": (11.5, 10  ), "T_5pct": (19,   16  ),
+        "elong":   (10,    10   ), "E_2pct": (575,  500 ), "E_5pct": (380,  320 ),
+    },
+}
+
+def geo_equivalent(geo_key, spacing_v, fs_geo, c_soil, phi_soil):
+    """Еквівалентні c та φ для армованого шару геосинтетикою.
+    Δc = T_design / spacing_v  (розподілена по висоті армованої зони)
+    Δφ = +3° для геосіток (ефект обмеження деформацій)
+    """
+    g = GEO_DATA[geo_key]
+    T_char   = g["T_2pct"][1]       # T@2% CMD — робочий стан по схилу
+    T_design = T_char / fs_geo
+    delta_c  = T_design / spacing_v
+    delta_phi = 3.0 if g["type"] == "geogrid" else 0.0
+    return (round(c_soil + delta_c, 1),
+            round(phi_soil + delta_phi, 1),
+            round(delta_c, 1), delta_phi)
+
 st.set_page_config(
     page_title="Стійкість лесового схилу",
     page_icon="⛰️",
@@ -329,31 +377,64 @@ with st.sidebar:
             ll_offset = st.slider("Відступ (м)", 0.0, 10.0, 2.0, 0.5)
 
     with st.expander("🌿 Армуючий матеріал", expanded=True):
-        arm_type = st.selectbox("Тип матеріалу", [
-            "Кокосове волокно",
-            "Джутова геосітка",
-            "Бамбукові палі",
-            "Фашини (верба)",
-            "Власні параметри"
-        ], help="Природний армуючий матеріал для зміцнення схилу")
+        arm_category = st.radio("Категорія", ["🌿 Природні", "🔧 Геосинтетика"],
+                                horizontal=True,
+                                help="Природні матеріали — емпіричні c/φ; Геосинтетика — розрахунок за T@2%")
         arm_layer = st.radio("Армується шар", ["Тільки шар 1", "Обидва шари"],
                              help="Який шар зміцнюється армуванням")
 
-        presets = {
-            "Кокосове волокно":  (13, 17),
-            "Джутова геосітка":  (10, 15),
-            "Бамбукові палі":    (15, 18),
-            "Фашини (верба)":    (11, 16),
-            "Власні параметри":  (12, 16),
-        }
-        dc, dp = presets[arm_type]
-        if arm_type == "Власні параметри":
-            c_arm = st.slider("c після армування (кПа)", 1.0, 50.0, float(dc), 1.0)
-            phi_arm = st.slider("φ після армування (°)", 5.0, 40.0, float(dp), 1.0)
+        if arm_category == "🌿 Природні":
+            arm_type = st.selectbox("Тип матеріалу", [
+                "Кокосове волокно",
+                "Джутова геосітка",
+                "Бамбукові палі",
+                "Фашини (верба)",
+                "Власні параметри"
+            ], help="Природний армуючий матеріал для зміцнення схилу")
+            presets = {
+                "Кокосове волокно":  (13, 17),
+                "Джутова геосітка":  (10, 15),
+                "Бамбукові палі":    (15, 18),
+                "Фашини (верба)":    (11, 16),
+                "Власні параметри":  (12, 16),
+            }
+            dc, dp = presets[arm_type]
+            if arm_type == "Власні параметри":
+                c_arm = st.slider("c після армування (кПа)", 1.0, 50.0, float(dc), 1.0)
+                phi_arm = st.slider("φ після армування (°)", 5.0, 40.0, float(dp), 1.0)
+            else:
+                c_arm = float(dc)
+                phi_arm = float(dp)
+                st.info(f"c = {c_arm} кПа | φ = {phi_arm}°")
         else:
-            c_arm = float(dc)
-            phi_arm = float(dp)
-            st.info(f"c = {c_arm} кПа | φ = {phi_arm}°")
+            # ── Геосинтетика ─────────────────────────────────────────────────
+            geo_key = st.selectbox(
+                "Матеріал",
+                list(GEO_DATA.keys()),
+                format_func=lambda k: f"{k} — {GEO_DATA[k]['name']}",
+                help="GT = геотекстиль, GG = геосітка"
+            )
+            arm_type = geo_key   # короткий ідентифікатор для решти коду
+            geo_spacing = st.slider(
+                "Крок укладання шарів (м)", 0.25, 1.0, 0.5, 0.05,
+                help="Вертикальна відстань між шарами геосинтетики")
+            geo_fs = st.select_slider(
+                "Коефіцієнт надійності Rfd",
+                options=[1.5, 1.75, 2.0, 2.5, 3.0],
+                value=2.0,
+                help="Rfd: 1.5–1.75 для геосіток, 2.0–2.5 для геотекстилю")
+
+            c_arm, phi_arm, delta_c, delta_phi = geo_equivalent(
+                geo_key, geo_spacing, geo_fs, c1_wet, phi1_wet)
+
+            g = GEO_DATA[geo_key]
+            T_d = g["T_2pct"][1] / geo_fs
+            st.markdown(
+                f"**{geo_key}** | T@2% CMD = {g['T_2pct'][1]} кН/м | Rfd = {geo_fs}  \n"
+                f"T_design = **{T_d:.1f} кН/м** | крок = {geo_spacing} м  \n"
+                f"→ Δc = **+{delta_c:.1f} кПа** | Δφ = +{delta_phi:.0f}°  \n"
+                f"→ **c = {c_arm} кПа** | **φ = {phi_arm}°**"
+            )
 
     st.markdown("---")
     st.markdown(
@@ -663,13 +744,14 @@ try:
     st.markdown("---")
 
     # ===== ВКЛАДКИ =====
-    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
         "🔄 Поверхні ковзання",
         "📊 Порівняння Fs",
         "📈 Параметричний аналіз",
         "🗺️ Всі поверхні",
         "📋 Таблиця та експорт",
-        "🔬 Верифікація методу"
+        "🔬 Верифікація методу",
+        "🔧 Геосинтетика"
     ])
 
     with tab1:
@@ -856,22 +938,36 @@ try:
         )
 
         st.markdown("---")
-        st.markdown("### Порівняння всіх армуючих матеріалів")
-        with st.spinner("Розраховуємо всі матеріали..."):
-            all_mats = {
-                "🥥 Кокосове волокно": (13, 17),
-                "🌾 Джутова геосітка": (10, 15),
-                "🎋 Бамбукові палі":   (15, 18),
-                "🌿 Фашини (верба)":   (11, 16),
-            }
-            mat_names, mat_fs = [], []
-            for name, (cm, pm) in all_mats.items():
-                try:
-                    _s = build_slope(cm, pm, g1_wet, water=wt)
-                    mat_names.append(name)
-                    mat_fs.append(round(_s.get_min_FOS(), 3))
-                except:
-                    pass
+        if arm_category == "🌿 Природні":
+            st.markdown("### Порівняння природних матеріалів")
+            with st.spinner("Розраховуємо всі матеріали..."):
+                all_mats = {
+                    "🥥 Кокосове волокно": (13, 17),
+                    "🌾 Джутова геосітка": (10, 15),
+                    "🎋 Бамбукові палі":   (15, 18),
+                    "🌿 Фашини (верба)":   (11, 16),
+                }
+                mat_names, mat_fs = [], []
+                for name, (cm, pm) in all_mats.items():
+                    try:
+                        _s = build_slope(cm, pm, g1_wet, water=wt)
+                        mat_names.append(name)
+                        mat_fs.append(round(_s.get_min_FOS(), 3))
+                    except:
+                        pass
+        else:
+            st.markdown("### Порівняння геосинтетичних матеріалів")
+            with st.spinner("Розраховуємо геосинтетичні матеріали..."):
+                mat_names, mat_fs = [], []
+                for gk in GEO_DATA:
+                    try:
+                        _ca, _pa, _, _ = geo_equivalent(gk, geo_spacing, geo_fs,
+                                                         c1_wet, phi1_wet)
+                        _s = build_slope(_ca, _pa, g1_wet, water=wt)
+                        mat_names.append(f"{gk} — {GEO_DATA[gk]['name'][:22]}")
+                        mat_fs.append(round(_s.get_min_FOS(), 3))
+                    except:
+                        pass
 
         if mat_fs:
             colors_mat = ["#4caf50" if f >= 1.5 else
@@ -888,8 +984,11 @@ try:
                               annotation_text="Норма Fs = 1.5 (ДБН)", annotation_font_color="#4caf50")
             fig_mat.add_hline(y=1.0, line_dash="dash", line_color="#f44336",
                               annotation_text="Зсув Fs = 1.0", annotation_font_color="#f44336")
+            chart_title = ("Ефективність природних матеріалів (замочений двошаровий схил)"
+                           if arm_category == "🌿 Природні"
+                           else f"Ефективність геосинтетики (крок {geo_spacing} м, Rfd = {geo_fs})")
             fig_mat.update_layout(
-                title="Ефективність природних матеріалів (замочений двошаровий схил)",
+                title=chart_title,
                 yaxis_title="Fs",
                 height=400,
                 showlegend=False,
@@ -1232,6 +1331,142 @@ try:
 **Нескінченний схил** дає приблизну оцінку для поверхневих зсувів і не враховує
 форму поверхні ковзання — тому зазвичай відрізняється більше.
             """)
+
+    # ===== ТАБ 7: ГЕОСИНТЕТИКА =====
+    with tab7:
+        st.markdown("### 🔧 Технічні характеристики геосинтетичних матеріалів")
+        st.caption("Дані відповідають ДСТУ EN ISO 10319, EN ISO 10321, EN 13251")
+
+        # ── Зведена таблиця ───────────────────────────────────────────────────
+        rows_geo = []
+        props = [
+            ("Тип матеріалу",                           "name"),
+            ("Матеріал",                                "material"),
+            ("Міцність на розтяг MD/CMD, кН/м",         "T_break"),
+            ("Міцність при видовж. 2%, MD/CMD, кН/м",   "T_2pct"),
+            ("Міцність при видовж. 5%, MD/CMD, кН/м",   "T_5pct"),
+            ("Відносне видовження при розриві, %",      "elong"),
+            ("Січний модуль E при 2%, MD/CMD, кН/м",    "E_2pct"),
+            ("Січний модуль E при 5%, MD/CMD, кН/м",    "E_5pct"),
+        ]
+        for label, key in props:
+            row = {"Показник": label}
+            for gk, gv in GEO_DATA.items():
+                val = gv[key]
+                if isinstance(val, tuple):
+                    row[gk] = f"{val[0]}/{val[1]}"
+                else:
+                    row[gk] = str(val)
+            rows_geo.append(row)
+
+        df_geo = pd.DataFrame(rows_geo).set_index("Показник")
+        st.dataframe(
+            df_geo,
+            use_container_width=True,
+            column_config={
+                "GT1": st.column_config.TextColumn("GT1 🟧", width="medium"),
+                "GT2": st.column_config.TextColumn("GT2 🟧", width="medium"),
+                "GT3": st.column_config.TextColumn("GT3 🟧", width="medium"),
+                "GG1": st.column_config.TextColumn("GG1 🟦", width="medium"),
+                "GG2": st.column_config.TextColumn("GG2 🟦", width="medium"),
+            }
+        )
+
+        st.markdown("---")
+        st.markdown("### 📐 Розрахункові параметри для методу Бішопа")
+        st.info(
+            "**Методика:** еквівалентне зчеплення від геосинтетики розраховується як  \n"
+            "**Δc = T_design / крок_шарів**  де  T_design = T@2% CMD / Rfd  \n"
+            "Для геосіток додатково Δφ = +3° (ефект обмеження деформацій)."
+        )
+
+        col_gs1, col_gs2 = st.columns(2)
+        with col_gs1:
+            spacing_demo = st.slider("Крок шарів (м) — для демонстрації",
+                                     0.25, 1.0, 0.5, 0.05, key="geo_tab_sp")
+        with col_gs2:
+            fs_demo = st.select_slider("Rfd — для демонстрації",
+                                       options=[1.5, 1.75, 2.0, 2.5, 3.0],
+                                       value=2.0, key="geo_tab_fs")
+
+        calc_rows = []
+        for gk, gv in GEO_DATA.items():
+            T_ch = gv["T_2pct"][1]
+            T_d  = T_ch / fs_demo
+            dc   = round(T_d / spacing_demo, 1)
+            dp   = 3.0 if gv["type"] == "geogrid" else 0.0
+            calc_rows.append({
+                "Матеріал":         f"{gk} — {gv['name']}",
+                "T@2% CMD (кН/м)":  T_ch,
+                "T_design (кН/м)":  round(T_d, 2),
+                "Δc (кПа)":         dc,
+                "Δφ (°)":           dp,
+                "c армованого (кПа)": round(c1_wet + dc, 1),
+                "φ армованого (°)":   round(phi1_wet + dp, 1),
+            })
+        df_calc = pd.DataFrame(calc_rows)
+        st.dataframe(df_calc, use_container_width=True, hide_index=True)
+
+        # ── Порівняльний графік Fs ────────────────────────────────────────────
+        st.markdown("### 📊 Коефіцієнт стійкості для кожного матеріалу")
+        with st.spinner("Розраховуємо..."):
+            geo_bar_names, geo_bar_fs = [], []
+            for gk in GEO_DATA:
+                try:
+                    _ca, _pa, _, _ = geo_equivalent(gk, spacing_demo, fs_demo,
+                                                     c1_wet, phi1_wet)
+                    _s = build_slope(_ca, _pa, g1_wet, water=wt)
+                    geo_bar_names.append(gk)
+                    geo_bar_fs.append(round(_s.get_min_FOS(), 3))
+                except:
+                    pass
+
+        if geo_bar_fs:
+            colors_g = ["#4caf50" if f >= 1.5 else
+                        "#ff9800" if f >= 1.0 else "#f44336" for f in geo_bar_fs]
+            fig_geo_bar = go.Figure()
+            fig_geo_bar.add_trace(go.Bar(
+                name="Геосинтетика",
+                x=geo_bar_names, y=geo_bar_fs,
+                marker_color=colors_g,
+                text=[f"{f:.3f}" for f in geo_bar_fs],
+                textposition="outside", width=0.4
+            ))
+            # Для порівняння додати Fs природній і замочений
+            fig_geo_bar.add_hline(y=fs2, line_dash="dot", line_color="#ef5350",
+                                  annotation_text=f"Замочений без арм. Fs={fs2:.3f}",
+                                  annotation_font_color="#ef5350")
+            fig_geo_bar.add_hline(y=1.5, line_dash="dash", line_color="#4caf50",
+                                  annotation_text="Норма ДБН Fs=1.5",
+                                  annotation_font_color="#4caf50")
+            fig_geo_bar.update_layout(
+                title=f"Fs замоченого схилу з геосинтетикою (крок {spacing_demo} м, Rfd = {fs_demo})",
+                yaxis_title="Fs",
+                height=400,
+                showlegend=False,
+                yaxis=dict(range=[0, max(geo_bar_fs) * 1.35]),
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(20,25,40,0.5)"
+            )
+            st.plotly_chart(fig_geo_bar, use_container_width=True)
+
+        # ── Пояснення методики ────────────────────────────────────────────────
+        st.markdown("---")
+        st.markdown("""
+#### 📚 Класифікація та застосування
+
+| Матеріал | Тип | Основна функція | Застосування на схилах |
+|---|---|---|---|
+| GT1 | Геотекстиль нетканий | Фільтрація, розподіл навантаження | Огортання дренажів, поверхневий захист |
+| GT2 | Геотекстиль нетканий (термо) | Фільтрація, сепарація | Під щебеневу підготовку |
+| GT3 | Геотекстиль тканий | Армування, розподіл | Армування насипів, підпірні конструкції |
+| GG1 | Геосітка жорстка (PP) | Армування ґрунту | Армовані укоси, підпірні стінки |
+| GG2 | Геосітка гнучка (PET) | Армування, обгортання | Армування крутих схилів |
+
+**Примітка щодо формули Δc:**  Еквівалентне зчеплення Δc = T_design / крок є **спрощеною** оцінкою.
+Точний розрахунок за EN 14475 або FHWA потребує врахування довжини закладення,
+кута нахилу поверхні ковзання та ексцентриситету армуючих сил.
+        """)
 
 except Exception as e:
     st.error(f"❌ Помилка розрахунку: {e}")
