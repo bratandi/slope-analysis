@@ -444,6 +444,13 @@ with st.sidebar:
         f"</div>",
         unsafe_allow_html=True
     )
+    st.markdown("---")
+    st.markdown(
+        "<div style='font-size:0.68rem;color:rgba(255,255,255,0.25);text-align:center'>"
+        "© 2025 Братандій М.О. · Всі права захищені · Несанкціоноване копіювання заборонено"
+        "</div>",
+        unsafe_allow_html=True
+    )
 
 
 # ===== ФУНКЦІЯ ПОБУДОВИ СХИЛУ =====
