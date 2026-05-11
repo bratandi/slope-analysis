@@ -776,28 +776,59 @@ try:
                 bgcolor="rgba(255,255,255,0.9)",
                 bordercolor=C_DEEP, borderwidth=1, borderpad=3)
 
-            # ── Layout ───────────────────────────────────────────────────────
-            y_plot_min = y_base - 2.8
+            # ── Layout з початковим зумом на зону зсуву ─────────────────────
+            x_margin = max((x_out - x_in) * 0.18, 3.0)
+            x_lo = x_in  - x_margin
+            x_hi = x_out + x_margin
+            y_lo = y_base - 3.2          # місце для лінії розмаху
+            y_hi = max(yc + 1.5, y_top + 2.5)  # місце для Fs анотації
+
             fig.update_layout(
-                height=440,
-                margin=dict(t=40, b=10, l=40, r=10),
-                title=dict(text=title, font=dict(size=13), x=0.5, xanchor="center"),
-                yaxis=dict(range=[y_plot_min, y_top + 3])
+                height=430,
+                margin=dict(t=8, b=8, l=40, r=10),
+                title=None,              # заголовок — в st.markdown нижче
+                xaxis=dict(range=[x_lo, x_hi]),
+                yaxis=dict(range=[y_lo, y_hi]),
+                modebar=dict(
+                    orientation="v",     # вертикальний тулбар праворуч
+                    bgcolor="rgba(255,255,255,0.7)",
+                    color="#555",
+                    activecolor="#1a237e",
+                ),
             )
             return fig
 
+        # Підписи сценаріїв — НИЖЧЕ тулбара (тулбар всередині chart-контейнера)
+        _chart_cfg = {"displayModeBar": True, "modeBarButtonsToRemove":
+                      ["lasso2d", "select2d", "autoScale2d"]}
+
         with col1:
-            st.markdown(f"**Природний** — Fs = {fs1:.3f} {fs_label(fs1)}")
-            fig1 = clean_critical_fig(s1, f"Природний · Fs = {fs1:.3f}")
-            st.plotly_chart(fig1, use_container_width=True)
+            fig1 = clean_critical_fig(s1, "")
+            st.plotly_chart(fig1, use_container_width=True, config=_chart_cfg)
+            st.markdown(f"<div style='text-align:center;font-size:0.9rem;margin-top:-12px'>"
+                        f"<b>Природний</b> — Fs = {fs1:.3f} {fs_label(fs1)}</div>",
+                        unsafe_allow_html=True)
         with col2:
-            st.markdown(f"**Замочений** — Fs = {fs2:.3f} {fs_label(fs2)}")
-            fig2 = clean_critical_fig(s2, f"Замочений · Fs = {fs2:.3f}")
-            st.plotly_chart(fig2, use_container_width=True)
+            fig2 = clean_critical_fig(s2, "")
+            st.plotly_chart(fig2, use_container_width=True, config=_chart_cfg)
+            st.markdown(f"<div style='text-align:center;font-size:0.9rem;margin-top:-12px'>"
+                        f"<b>Замочений</b> — Fs = {fs2:.3f} {fs_label(fs2)}</div>",
+                        unsafe_allow_html=True)
         with col3:
-            st.markdown(f"**З армуванням ({arm_type[:12]})** — Fs = {fs3:.3f} {fs_label(fs3)}")
-            fig3 = clean_critical_fig(s3, f"З армуванням · Fs = {fs3:.3f}")
-            st.plotly_chart(fig3, use_container_width=True)
+            fig3 = clean_critical_fig(s3, "")
+            st.plotly_chart(fig3, use_container_width=True, config=_chart_cfg)
+            st.markdown(f"<div style='text-align:center;font-size:0.9rem;margin-top:-12px'>"
+                        f"<b>З армуванням ({arm_type[:14]})</b> — Fs = {fs3:.3f} {fs_label(fs3)}</div>",
+                        unsafe_allow_html=True)
+
+        # Легенда маркерів pyslope
+        st.markdown(
+            "<div style='font-size:0.78rem;color:#555;margin-top:4px;padding:6px 10px;"
+            "background:rgba(240,243,255,0.8);border-radius:6px;display:inline-block'>"
+            "▶| — точка <b>входу</b> поверхні ковзання (де зсув виходить на поверхню вгорі)&emsp;"
+            "|◀ — точка <b>виходу</b> (де зсув виходить на поверхню внизу)</div>",
+            unsafe_allow_html=True
+        )
 
         st.markdown("---")
         st.markdown("### Порівняння всіх армуючих матеріалів")
