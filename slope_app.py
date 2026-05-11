@@ -679,6 +679,12 @@ try:
             """Будує plot_critical() з розмітками входу/виходу поверхні ковзання"""
             fig = slope_obj.plot_critical(material_table=False)
 
+            # Прибрати вбудовані ►|◄ маркери pyslope — замінюємо своїми анотаціями
+            fig.update_layout(annotations=[
+                a for a in fig.layout.annotations
+                if '►' not in (a.text or '') and '◄' not in (a.text or '')
+            ])
+
             # ── Координати геометрії ──────────────────────────────────────────
             ends   = slope_obj.get_min_FOS_end_points()
             circle = slope_obj.get_min_FOS_circle()   # (xc, yc, R)
@@ -687,11 +693,15 @@ try:
 
             if not ends or not circle:
                 fig.update_layout(height=430, margin=dict(t=40, b=30, l=40, r=10),
-                    title=dict(text=title, font=dict(size=13), x=0.5, xanchor="center"))
+                    title={"text": title or ""})
                 return fig
 
-            x_in,  y_in  = ends[0]   # точка входу (вгорі)
-            x_out, y_out = ends[1]   # точка виходу (внизу)
+            x_in,  y_in  = ends[0]
+            x_out, y_out = ends[1]
+            # Гарантуємо: вхід — вища точка (більша Y), вихід — нижча
+            if y_in < y_out:
+                x_in, y_in, x_out, y_out = x_out, y_out, x_in, y_in
+
             xc, yc, R = circle
 
             # Висоти відносно підошви (реальні метри)
@@ -707,8 +717,8 @@ try:
             span = round(x_out - x_in, 1)
 
             # Простір під схилом для розмітки
-            y_dim   = y_base - 1.2   # лінія розмірів
-            y_label = y_base - 2.0   # текст розміру
+            y_dim   = y_base - 1.0   # лінія розмірів
+            y_label = y_base - 1.7   # текст розміру
 
             C_IN   = "rgba(230, 81, 0, 0.9)"    # помаранчевий — вхід
             C_OUT  = "rgba(21, 101, 192, 0.9)"  # синій — вихід
@@ -730,7 +740,7 @@ try:
             # засічки на кінцях
             for xp in [x_in, x_out]:
                 fig.add_shape(type="line",
-                    x0=xp, y0=y_dim - 0.4, x1=xp, y1=y_dim + 0.4,
+                    x0=xp, y0=y_dim - 0.3, x1=xp, y1=y_dim + 0.3,
                     line=dict(color=C_SPAN, width=1.5), layer="above")
 
             # ── 3. Вертикальна лінія глибини ─────────────────────────────────
@@ -739,9 +749,9 @@ try:
                 line=dict(color=C_DEEP, width=1.5, dash="dashdot"),
                 layer="above")
 
-            # ── 4. Анотації маркерів входу/виходу ────────────────────────────
+            # ── 4. Анотації входу/виходу ──────────────────────────────────────
             fig.add_annotation(
-                x=x_in, y=y_in, ax=-38, ay=-34,
+                x=x_in, y=y_in, ax=-30, ay=-25,
                 text=f"<b>Вхід</b><br>↕ {h_in:.1f} м",
                 showarrow=True, arrowhead=2, arrowsize=0.8,
                 arrowwidth=1.8, arrowcolor=C_IN,
@@ -750,7 +760,7 @@ try:
                 bordercolor=C_IN, borderwidth=1.5, borderpad=3)
 
             fig.add_annotation(
-                x=x_out, y=y_out, ax=38, ay=-34,
+                x=x_out, y=y_out, ax=30, ay=-25,
                 text=f"<b>Вихід</b><br>↕ {h_out:.1f} м",
                 showarrow=True, arrowhead=2, arrowsize=0.8,
                 arrowwidth=1.8, arrowcolor=C_OUT,
@@ -776,21 +786,32 @@ try:
                 bgcolor="rgba(255,255,255,0.9)",
                 bordercolor=C_DEEP, borderwidth=1, borderpad=3)
 
-            # ── Layout з початковим зумом на зону зсуву ─────────────────────
-            x_margin = max((x_out - x_in) * 0.18, 3.0)
+            # ── Layout: зум + осі зверху ──────────────────────────────────────
+            x_margin = max((x_out - x_in) * 0.10, 2.5)
             x_lo = x_in  - x_margin
             x_hi = x_out + x_margin
-            y_lo = y_base - 3.2          # місце для лінії розмаху
-            y_hi = max(yc + 1.5, y_top + 2.5)  # місце для Fs анотації
+            y_lo = y_base - 2.5
+            y_hi = max(yc + 1.5, y_top + 1.5)
 
             fig.update_layout(
                 height=430,
-                margin=dict(t=8, b=8, l=40, r=10),
-                title=None,              # заголовок — в st.markdown нижче
-                xaxis=dict(range=[x_lo, x_hi]),
-                yaxis=dict(range=[y_lo, y_hi]),
+                margin=dict(t=32, b=8, l=45, r=10),
+                title={"text": ""},          # прибрати "undefined" від pyslope
+                xaxis=dict(
+                    range=[x_lo, x_hi],
+                    autorange=False,
+                    side="top",              # вісь X підписана ЗВЕРХУ графіка
+                    title=dict(text="Відстань (м)", font=dict(size=10, color="#555")),
+                    tickfont=dict(size=9, color="#666"),
+                ),
+                yaxis=dict(
+                    range=[y_lo, y_hi],
+                    autorange=False,
+                    title=dict(text="Відмітка (м)", font=dict(size=10, color="#555")),
+                    tickfont=dict(size=9, color="#666"),
+                ),
                 modebar=dict(
-                    orientation="v",     # вертикальний тулбар праворуч
+                    orientation="v",
                     bgcolor="rgba(255,255,255,0.7)",
                     color="#555",
                     activecolor="#1a237e",
