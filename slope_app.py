@@ -797,25 +797,29 @@ try:
                 height=430,
                 margin=dict(t=32, b=8, l=45, r=10),
                 title={"text": ""},          # прибрати "undefined" від pyslope
-                xaxis=dict(
-                    range=[x_lo, x_hi],
-                    autorange=False,
-                    side="top",              # вісь X підписана ЗВЕРХУ графіка
-                    title=dict(text="Відстань (м)", font=dict(size=10, color="#555")),
-                    tickfont=dict(size=9, color="#666"),
-                ),
-                yaxis=dict(
-                    range=[y_lo, y_hi],
-                    autorange=False,
-                    title=dict(text="Відмітка (м)", font=dict(size=10, color="#555")),
-                    tickfont=dict(size=9, color="#666"),
-                ),
                 modebar=dict(
                     orientation="v",
                     bgcolor="rgba(255,255,255,0.7)",
                     color="#555",
                     activecolor="#1a237e",
                 ),
+            )
+            # update_xaxes / update_yaxes викликаються ПІСЛЯ update_layout —
+            # це єдиний надійний спосіб перевизначити діапазон pyslope
+            fig.update_xaxes(
+                range=[x_lo, x_hi],
+                autorange=False,
+                side="top",
+                title_text="Відстань (м)",
+                title_font=dict(size=10, color="#555"),
+                tickfont=dict(size=9, color="#666"),
+            )
+            fig.update_yaxes(
+                range=[y_lo, y_hi],
+                autorange=False,
+                title_text="Відмітка (м)",
+                title_font=dict(size=10, color="#555"),
+                tickfont=dict(size=9, color="#666"),
             )
             return fig
 
