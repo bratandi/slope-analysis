@@ -401,10 +401,11 @@ def build_slope(
     if with_load and use_ll:
         s.set_lls(LineLoad(magnitude=ll_mag, offset=ll_offset))
 
-    s.set_analysis_limits(
-        s.get_top_coordinates()[0] - 3,
-        s.get_bottom_coordinates()[0] + 3
-    )
+    # Межі пошуку по X (від гребеня до підошви з запасом)
+    x_top = s.get_top_coordinates()[0]
+    x_bot = s.get_bottom_coordinates()[0]
+    s.set_analysis_limits(x_top - 3, x_bot + 3)
+
     s.analyse_slope()
     return s
 
@@ -675,12 +676,113 @@ try:
         st.markdown("### Критичні поверхні ковзання")
         col1, col2, col3 = st.columns(3)
         def clean_critical_fig(slope_obj, title):
-            """Будує plot_critical() без вбудованої таблиці матеріалів"""
+            """Будує plot_critical() з розмітками входу/виходу поверхні ковзання"""
             fig = slope_obj.plot_critical(material_table=False)
+
+            # ── Координати геометрії ──────────────────────────────────────────
+            ends   = slope_obj.get_min_FOS_end_points()
+            circle = slope_obj.get_min_FOS_circle()   # (xc, yc, R)
+            y_base = slope_obj.get_bottom_coordinates()[1]  # відмітка підошви
+            y_top  = slope_obj.get_top_coordinates()[1]     # відмітка гребеня
+
+            if not ends or not circle:
+                fig.update_layout(height=430, margin=dict(t=40, b=30, l=40, r=10),
+                    title=dict(text=title, font=dict(size=13), x=0.5, xanchor="center"))
+                return fig
+
+            x_in,  y_in  = ends[0]   # точка входу (вгорі)
+            x_out, y_out = ends[1]   # точка виходу (внизу)
+            xc, yc, R = circle
+
+            # Висоти відносно підошви (реальні метри)
+            h_in  = round(y_in  - y_base, 1)
+            h_out = round(y_out - y_base, 1)
+
+            # Максимальна глибина поверхні ковзання (нижня точка кола)
+            y_deepest  = yc - R
+            depth_from_surface = round(y_top - y_deepest, 1)
+            x_deepest  = xc  # нижня точка кола — по горизонталі = центр
+
+            # Горизонтальний розмах
+            span = round(x_out - x_in, 1)
+
+            # Простір під схилом для розмітки
+            y_dim   = y_base - 1.2   # лінія розмірів
+            y_label = y_base - 2.0   # текст розміру
+
+            C_IN   = "rgba(230, 81, 0, 0.9)"    # помаранчевий — вхід
+            C_OUT  = "rgba(21, 101, 192, 0.9)"  # синій — вихід
+            C_DEEP = "rgba(46, 125, 50, 0.9)"   # зелений — глибина
+            C_SPAN = "rgba(80, 80, 80, 0.75)"   # сірий — розмах
+
+            # ── 1. Вертикальні пунктири від маркерів до підошви ──────────────
+            for xp, yp, col in [(x_in, y_in, C_IN), (x_out, y_out, C_OUT)]:
+                fig.add_shape(type="line",
+                    x0=xp, y0=yp, x1=xp, y1=y_base,
+                    line=dict(color=col, width=1.5, dash="dot"),
+                    layer="above")
+
+            # ── 2. Горизонтальна лінія-розмір (розмах) ───────────────────────
+            fig.add_shape(type="line",
+                x0=x_in, y0=y_dim, x1=x_out, y1=y_dim,
+                line=dict(color=C_SPAN, width=1.5),
+                layer="above")
+            # засічки на кінцях
+            for xp in [x_in, x_out]:
+                fig.add_shape(type="line",
+                    x0=xp, y0=y_dim - 0.4, x1=xp, y1=y_dim + 0.4,
+                    line=dict(color=C_SPAN, width=1.5), layer="above")
+
+            # ── 3. Вертикальна лінія глибини ─────────────────────────────────
+            fig.add_shape(type="line",
+                x0=x_deepest, y0=y_top, x1=x_deepest, y1=y_deepest,
+                line=dict(color=C_DEEP, width=1.5, dash="dashdot"),
+                layer="above")
+
+            # ── 4. Анотації маркерів входу/виходу ────────────────────────────
+            fig.add_annotation(
+                x=x_in, y=y_in, ax=-38, ay=-34,
+                text=f"<b>Вхід</b><br>↕ {h_in:.1f} м",
+                showarrow=True, arrowhead=2, arrowsize=0.8,
+                arrowwidth=1.8, arrowcolor=C_IN,
+                font=dict(size=10, color=C_IN),
+                bgcolor="rgba(255,255,255,0.92)",
+                bordercolor=C_IN, borderwidth=1.5, borderpad=3)
+
+            fig.add_annotation(
+                x=x_out, y=y_out, ax=38, ay=-34,
+                text=f"<b>Вихід</b><br>↕ {h_out:.1f} м",
+                showarrow=True, arrowhead=2, arrowsize=0.8,
+                arrowwidth=1.8, arrowcolor=C_OUT,
+                font=dict(size=10, color=C_OUT),
+                bgcolor="rgba(255,255,255,0.92)",
+                bordercolor=C_OUT, borderwidth=1.5, borderpad=3)
+
+            # ── 5. Анотація розмаху ───────────────────────────────────────────
+            fig.add_annotation(
+                x=(x_in + x_out) / 2, y=y_label,
+                text=f"↔ L = {span} м",
+                showarrow=False,
+                font=dict(size=10, color=C_SPAN),
+                bgcolor="rgba(255,255,255,0.9)",
+                bordercolor=C_SPAN, borderwidth=1, borderpad=3)
+
+            # ── 6. Анотація глибини поверхні ─────────────────────────────────
+            fig.add_annotation(
+                x=x_deepest + 1.5, y=(y_top + y_deepest) / 2,
+                text=f"↕ {depth_from_surface} м",
+                showarrow=False,
+                font=dict(size=10, color=C_DEEP),
+                bgcolor="rgba(255,255,255,0.9)",
+                bordercolor=C_DEEP, borderwidth=1, borderpad=3)
+
+            # ── Layout ───────────────────────────────────────────────────────
+            y_plot_min = y_base - 2.8
             fig.update_layout(
-                height=400,
-                margin=dict(t=40, b=10, l=10, r=10),
-                title=dict(text=title, font=dict(size=13), x=0.5, xanchor="center")
+                height=440,
+                margin=dict(t=40, b=10, l=40, r=10),
+                title=dict(text=title, font=dict(size=13), x=0.5, xanchor="center"),
+                yaxis=dict(range=[y_plot_min, y_top + 3])
             )
             return fig
 
