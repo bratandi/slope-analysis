@@ -558,24 +558,22 @@ try:
             font=dict(size=11, color="#2c3e50")
         ),
         xaxis=dict(
-            title="Відстань (м)",
+            title=dict(text="Відстань (м)", font=dict(color="#2c3e50")),
             range=[-platform - 0.5, L + platform + 0.5],
             gridcolor="rgba(180,190,200,0.4)",
             zeroline=True,
             zerolinecolor="rgba(100,100,100,0.3)",
             zerolinewidth=1,
             tickfont=dict(color="#2c3e50"),
-            titlefont=dict(color="#2c3e50")
         ),
         yaxis=dict(
-            title="Позначка (м)",
+            title=dict(text="Позначка (м)", font=dict(color="#2c3e50")),
             range=[bottom - 0.5, H + 1.2],
             gridcolor="rgba(180,190,200,0.4)",
             zeroline=True,
             zerolinecolor="rgba(100,100,100,0.5)",
             zerolinewidth=1.5,
             tickfont=dict(color="#2c3e50"),
-            titlefont=dict(color="#2c3e50")
         ),
         margin=dict(t=10, b=20, l=55, r=175),
         paper_bgcolor="rgba(0,0,0,0)",
