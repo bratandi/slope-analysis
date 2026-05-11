@@ -462,100 +462,124 @@ try:
 
     fig_geo = go.Figure()
 
+    # Кольори шарів залежно від типу підстильного ґрунту
+    layer2_colors = {
+        "Суглинок":      ("rgba(108, 142, 168, 0.75)", "rgba(70, 105, 135, 0.9)"),
+        "Глина тверда":  ("rgba(140, 115, 100, 0.75)", "rgba(105, 80, 65, 0.9)"),
+        "Глина м'яка":   ("rgba(160, 130, 110, 0.70)", "rgba(125, 95, 75, 0.9)"),
+        "Пісок":         ("rgba(210, 195, 130, 0.75)", "rgba(175, 155, 90, 0.9)"),
+        "Власні параметри": ("rgba(120, 150, 140, 0.75)", "rgba(85, 115, 105, 0.9)"),
+    }
+    l2_fill, l2_line = layer2_colors.get(layer2_type, layer2_colors["Суглинок"])
+
+    # Шар 2 — підстильний (синьо-сірий, залежить від типу)
     fig_geo.add_trace(go.Scatter(
         x=[-platform, -platform, x_intersect, L, L + platform, L + platform, -platform],
         y=[bottom, layer1_bottom, layer1_bottom, 0, 0, bottom, bottom],
         fill="toself",
-        fillcolor="rgba(72, 209, 204, 0.55)",
-        line=dict(color="rgba(0,150,150,0.9)", width=1.5),
+        fillcolor=l2_fill,
+        line=dict(color=l2_line, width=1.5),
         name=f"Шар 2 — {layer2_type}",
         mode="lines"
     ))
 
+    # Шар 1 — лес (пісково-жовтий — геологічно коректний колір лесу)
     fig_geo.add_trace(go.Scatter(
         x=[-platform, -platform, 0, x_intersect, 0, -platform],
         y=[layer1_bottom, H, H, layer1_bottom, layer1_bottom, layer1_bottom],
         fill="toself",
-        fillcolor="rgba(250, 160, 122, 0.6)",
-        line=dict(color="rgba(200,80,60,0.9)", width=1.5),
+        fillcolor="rgba(205, 168, 85, 0.80)",
+        line=dict(color="rgba(160, 125, 40, 0.9)", width=1.5),
         name="Шар 1 — Лес",
         mode="lines"
     ))
 
+    # Лінія поверхні схилу
     fig_geo.add_trace(go.Scatter(
         x=[-platform, 0, 0, L, L + platform],
         y=[H, H, H, 0, 0],
         mode="lines",
-        line=dict(color="white", width=2.5),
+        line=dict(color="#2c3e50", width=3),
         showlegend=False
     ))
 
+    # Межа шарів
     fig_geo.add_trace(go.Scatter(
         x=[-platform, x_intersect],
         y=[layer1_bottom, layer1_bottom],
         mode="lines",
-        line=dict(color="#ff6b6b", width=2, dash="dash"),
+        line=dict(color="#c0392b", width=2, dash="dash"),
         name=f"Межа шарів ({depth1} м)"
     ))
 
+    # ГРВ
     if wt is not None:
         wt_y = H - wt
         x_end = L * (H - wt_y) / H if wt_y >= 0 else L + platform
         fig_geo.add_trace(go.Scatter(
             x=[-platform, x_end],
             y=[wt_y, wt_y],
-            mode="lines",
-            line=dict(color="#64b5f6", width=2.5, dash="dot"),
-            name=f"💧 ГРВ на глиб. {wt} м"
+            mode="lines+markers",
+            line=dict(color="#1565c0", width=2.5, dash="dot"),
+            marker=dict(symbol="triangle-up", size=8, color="#1565c0"),
+            name=f"ГРВ на глиб. {wt} м"
         ))
 
+    # Підпис шару 1
     fig_geo.add_annotation(
         x=-platform * 0.5, y=(layer1_bottom + H) / 2,
         text=f"<b>Шар 1: Лес</b><br>c={c1_nat} кПа | φ={phi1_nat}°<br>γ={g1_nat} кН/м³",
         showarrow=False,
-        font=dict(size=10, color="rgb(255,210,190)"),
-        bgcolor="rgba(60,20,10,0.7)",
-        bordercolor="rgba(200,80,60,0.6)",
-        borderwidth=1, borderpad=4
+        font=dict(size=10, color="#4a2c00"),
+        bgcolor="rgba(255, 240, 195, 0.90)",
+        bordercolor="rgba(160, 125, 40, 0.8)",
+        borderwidth=1, borderpad=5
     )
+    # Підпис шару 2
     fig_geo.add_annotation(
         x=L * 0.6, y=(layer1_bottom + bottom) / 2,
         text=f"<b>Шар 2: {layer2_type}</b><br>c={c2_layer} кПа | φ={phi2_layer}°<br>γ={g2_layer} кН/м³",
         showarrow=False,
-        font=dict(size=10, color="rgb(180,255,255)"),
-        bgcolor="rgba(0,40,40,0.7)",
-        bordercolor="rgba(0,150,150,0.6)",
-        borderwidth=1, borderpad=4
+        font=dict(size=10, color="#1a2f40"),
+        bgcolor="rgba(220, 235, 248, 0.90)",
+        bordercolor="rgba(70, 105, 135, 0.8)",
+        borderwidth=1, borderpad=5
     )
 
     fig_geo.update_layout(
-        height=330,
+        height=340,
         showlegend=True,
         legend=dict(
             x=1.01, y=1.0,
             xanchor="left", yanchor="top",
-            bgcolor="rgba(15,15,25,0.85)",
-            bordercolor="rgba(255,255,255,0.15)",
+            bgcolor="rgba(255,255,255,0.92)",
+            bordercolor="rgba(0,0,0,0.15)",
             borderwidth=1,
-            font=dict(size=11)
+            font=dict(size=11, color="#2c3e50")
         ),
         xaxis=dict(
             title="Відстань (м)",
             range=[-platform - 0.5, L + platform + 0.5],
-            gridcolor="rgba(255,255,255,0.07)",
-            zeroline=False
+            gridcolor="rgba(180,190,200,0.4)",
+            zeroline=True,
+            zerolinecolor="rgba(100,100,100,0.3)",
+            zerolinewidth=1,
+            tickfont=dict(color="#2c3e50"),
+            titlefont=dict(color="#2c3e50")
         ),
         yaxis=dict(
             title="Позначка (м)",
             range=[bottom - 0.5, H + 1.2],
-            gridcolor="rgba(255,255,255,0.07)",
+            gridcolor="rgba(180,190,200,0.4)",
             zeroline=True,
-            zerolinecolor="rgba(255,255,255,0.2)",
-            zerolinewidth=1
+            zerolinecolor="rgba(100,100,100,0.5)",
+            zerolinewidth=1.5,
+            tickfont=dict(color="#2c3e50"),
+            titlefont=dict(color="#2c3e50")
         ),
-        margin=dict(t=10, b=20, l=55, r=170),
+        margin=dict(t=10, b=20, l=55, r=175),
         paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(20,25,40,0.6)"
+        plot_bgcolor="rgba(248, 250, 253, 1.0)"
     )
     st.plotly_chart(fig_geo, use_container_width=True)
 
